@@ -1,9 +1,12 @@
+#include "authentication.h"
+
+
 #include <iostream>
 using namespace std;
 
 int main(){
 
-    cout << "Hello World!" << endl;
+    authenticationMenu();
 
     return 0;
 
