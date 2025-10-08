@@ -1,10 +1,13 @@
 #include "utility.h"
+#include "authentication.h"
 #include "colors.h"
 
 
 
 #include <iostream>
 #include <cstdlib>
+#include <limits>
+#include <fstream>
 
 
 
@@ -23,51 +26,10 @@
 using namespace std;
 
 
+bool VOICE_ENABLED = true;
 
+bool COLOR_ENABLED = true;
 
-
-/********************************************************************************/
-/* Function Name: getch                                                         */
-/*                                                                              */
-/* Inputs       : None                                                          */
-/*                                                                              */
-/* Returns      : Char                                                          */
-/*                                                                              */
-/* Note         : This is getch function for ubuntu                             */
-/********************************************************************************/
-
-#ifndef _WIN32
-
-char getch(){
-
-    char buf = 0;
-
-    struct termios old = {0};
-
-    if (tcgetattr(0, &old) < 0) perror("tcsetattr()");
-
-    old.c_lflag &= ~ICANON;
-
-    old.c_lflag &= ~ECHO;
-
-    old.c_cc[VMIN] = 1;
-
-    old.c_cc[VTIME] = 0;
-
-    if (tcsetattr(0, TCSANOW, &old) < 0) perror("tcsetattr ICANON");
-
-    if (read(0, &buf, 1) < 0) perror("read()");
-
-    old.c_lflag |= ICANON;
-
-    old.c_lflag |= ECHO;
-
-    if (tcsetattr(0, TCSADRAIN, &old) < 0) perror("tcsetattr ~ICANON");
-
-    return buf;
-
-}
-#endif
 
 
 
@@ -126,13 +88,17 @@ int clearScreen(){
 /* Note         : This will tell user to press to continue the game             */
 /********************************************************************************/
 
-void pressToContinue(){
+void pressToContinue(int a){
 
     cout << "Enter Any Key To Continue... ";
 
     speak("Enter Any Key To Continue");
 
-    cin.ignore();
+    if(a == 0){
+
+        cin.ignore();
+
+    }
 
     cin.get();
 
@@ -150,79 +116,134 @@ void pressToContinue(){
 /* Note         : This is Email Input Function                                  */
 /********************************************************************************/
 
-string getEmailInput(string prompt){
-
+string getEmailInput(string prompt) {
+    
     string email;
-
+    
     string command;
-
+    
     bool valid = false;
 
     do{
-
+        
         cout << prompt;
-
+        
         speak(prompt);
+        
+        getline(cin, email);
 
-        cin >> email;
+        if (email == "*") exitWindow();
+        
+        if (email == "-") return email;
 
-        if(email == "*"){
+        email.erase(0, email.find_first_not_of(' '));
+        
+        email.erase(email.find_last_not_of(' ') + 1);
 
-            exitWindow();
-
+        if(email.find(' ') != string::npos){
+            
+            command = "Invalid Email! No spaces allowed in email!";
+            
+            cout << RED() << command << RESET() << endl;
+            
+            speak(command);
+            
+            continue;
+        
         }
 
         size_t atPos = email.find('@');
-
-        size_t atLastPos = email.rfind('@');
-
-        if(atPos == string::npos || atPos != atLastPos){
-
-            command = "Invalid Email! Only One @ Allowed In Email!";
-            
-            cout << RED << command << RESET << endl;
-
-            speak(command);
-
-            continue;
-
-        }
-
-        string domain = email.substr(atPos+1);
         
-        size_t dotPos = domain.find('.');
-
-        if(dotPos == string::npos){
-
-            command = "Invalid Email! Must Have At Least One Dot After @";
+        size_t atLastPos = email.rfind('@');
+        
+        if(atPos == string::npos || atPos != atLastPos){
             
-            cout << RED << command << RESET << endl; 
-
+            command = "Invalid Email! Only one @ allowed!";
+            
+            cout << RED() << command << RESET() << endl;
+            
             speak(command);
-
+            
             continue;
-
+        
         }
 
-        if(domain.back() == '.'){
+        if(atPos == 0 || atPos == email.length() - 1){
             
-            command = "Invalid Email! Dot Cannot Be The Last Character. Try Again!";
+            command = "Invalid Email! Must have something before and after @!";
             
-            cout << RED << command << RESET << endl;
-
+            cout << RED() << command << RESET() << endl;
+            
             speak(command);
-
+            
             continue;
+        
+        }
 
+        string domain = email.substr(atPos + 1);
+
+        size_t dotPos = domain.find('.');
+        
+        if(dotPos == string::npos){
+            
+            command = "Invalid Email! Must have at least one dot after @!";
+            
+            cout << RED() << command << RESET() << endl;
+            
+            speak(command);
+            
+            continue;
+        
+        }
+
+        if(domain.front() == '.' || domain.back() == '.'){
+            
+            command = "Invalid Email! Dot cannot be the first or last character after @!";
+            
+            cout << RED() << command << RESET() << endl;
+            
+            speak(command);
+            
+            continue;
+        
+        }
+
+        if(domain.find("..") != string::npos){
+            
+            command = "Invalid Email! Domain cannot contain consecutive dots!";
+            
+            cout << RED() << command << RESET() << endl;
+            
+            speak(command);
+            
+            continue;
+        
+        }
+
+        size_t lastDot = domain.rfind('.');
+        
+        string tld = domain.substr(lastDot + 1);
+        
+        if(tld.length() < 2){
+            
+            command = "Invalid Email! Domain extension must be at least 2 characters (e.g., .com, .org)";
+            
+            cout << RED() << command << RESET() << endl;
+            
+            speak(command);
+            
+            continue;
+        
         }
 
         valid = true;
 
-    }   while(!valid);
-    
+    } while (!valid);
+
     return email;
 
 }
+
 
 
 
@@ -236,21 +257,68 @@ string getEmailInput(string prompt){
 /* Note         : This is Password Input Function                               */
 /********************************************************************************/
 
-string getPasswordInput(string prompt){
+string getPasswordInput(const string &prompt){
     
     string password;
-
-    string command;
     
     char ch;
 
     cout << prompt;
-    
-    speak(prompt);
 
-    while (true){
+    speak(prompt);
+    
+    cout.flush();
+
+#ifdef _WIN32
+    
+    while (true) {
         
-        ch = getch();
+        ch = _getch();
+
+        if(ch == '\r' || ch == '\n'){
+            
+            cout << endl;
+            
+            break;
+        
+        }
+        
+        else if (ch == 8){
+            
+            if(!password.empty()){
+                
+                cout << "\b \b";
+                
+                password.pop_back();
+            
+            }
+        }
+        
+        else{
+            
+            password.push_back(ch);
+            
+            cout << '*';
+        
+        }
+    
+    }
+
+#else
+
+    struct termios oldt, newt;
+
+    tcgetattr(STDIN_FILENO, &oldt);
+
+    newt = oldt;
+
+    newt.c_lflag &= ~(ECHO | ICANON);
+
+    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+
+    while(true){
+        
+        ch = getchar();
 
         if(ch == '\n' || ch == '\r'){
             
@@ -262,7 +330,7 @@ string getPasswordInput(string prompt){
         
         else if(ch == 127 || ch == 8){
             
-            if (!password.empty()) {
+            if(!password.empty()){
                 
                 cout << "\b \b";
                 
@@ -277,10 +345,16 @@ string getPasswordInput(string prompt){
             password.push_back(ch);
             
             cout << '*';
+            
+            cout.flush();
         
         }
     
     }
+
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+
+#endif
 
     if(password == "*"){
         
@@ -288,19 +362,91 @@ string getPasswordInput(string prompt){
     
     }
 
+    if(password == "-"){
+
+        return password;
+
+    }
+
     if(password.length() < 8){
         
-        command = "Invalid Password! Must be at least 8 characters!";
-        
-        cout << endl << RED << command << RESET << endl;
-        
-        speak(command);
+        cout << RED() << "Invalid Password! Must be at least 8 characters!" << RESET() << endl;
+
+        speak("Invalid Password! Must be at least 8 characters!");
         
         return getPasswordInput(prompt);
     
     }
 
     return password;
+
+}
+
+
+
+/********************************************************************************/
+/* Function Name: getIntInput                                                   */
+/*                                                                              */
+/* Inputs       : String                                                        */
+/*                                                                              */
+/* Returns      : Int                                                           */
+/*                                                                              */
+/* Note         : This is Password Input Function                               */
+/********************************************************************************/
+
+int getIntInput(string prompt) {
+    
+    string value;
+    
+    while(true){
+        
+        cout << prompt;
+
+        speak(prompt);
+        
+        cin >> value;
+
+        if(value == "*")    exitWindow();
+
+        else if(value == "-"){
+
+            return -1;
+
+        }
+
+        else{
+
+            bool isNumber = true;
+
+            for(char c : value){
+
+                if(!isdigit(c)){
+
+                    isNumber = false;
+                    
+                    break;
+
+                }
+
+            }
+
+            if(isNumber){
+
+                return stoi(value);
+
+            }
+
+            else{
+
+                cout << "Invalid Input! Please Enter A Number, * to Exit, or - to go back!\n";
+
+                speak("Invalid Input! Please Enter A Number, * to Exit, or - to go back!");
+
+            }
+
+        }
+    
+    }
 
 }
 
@@ -326,23 +472,23 @@ void loadingScreen(string prompt){
 
         clearScreen();
 
-        cout << prompt << endl;
+        cout << prompt << endl << endl << endl;
 
         for(int i=0; i<=x; i++){
 
-            cout << "█";
+            cout << YELLOW() << "█" << RESET();
 
         }
 
         cout << flush;
 
-        sleepMS(10);
+        sleepMS(50);
         
         x++;
 
     }   while(x!=50);
 
-    cout << endl;
+    cout << endl << endl << endl;
 
 }
 
@@ -386,6 +532,8 @@ void exitWindow(){
 
 void speak(string text){
 
+    if(!VOICE_ENABLED) return;
+    
     #ifdef _WIN32
 
         string command = "PowerShell -Command \"Add-Type -AssemblyName System.Speech; "
@@ -401,4 +549,108 @@ void speak(string text){
     
     #endif
 
+}
+
+
+
+/********************************************************************************/
+/* Function Name: voiceSetting                                                  */
+/*                                                                              */
+/* Inputs       : None                                                          */
+/*                                                                              */
+/* Returns      : None                                                          */
+/*                                                                              */
+/* Note         : This is Turn On And Turn Off Voice                            */
+/********************************************************************************/
+
+void loadConfig(){
+
+    ifstream file("Database/config.txt");
+
+    if (!file.is_open()) return;
+
+    string line;
+
+    if(getline(file, line)){
+        
+        string decrypted = decryptFromHex(line);
+        
+        VOICE_ENABLED = (decrypted == "1");
+    
+    }
+
+    if(getline(file, line)){
+        
+        string decrypted = decryptFromHex(line);
+        
+        COLOR_ENABLED = (decrypted == "1");
+    
+    }
+
+    file.close();
+
+}
+
+
+
+
+
+
+
+
+/********************************************************************************/
+/* Function Name: saveVoiceConfig                                               */
+/*                                                                              */
+/* Inputs       : Bool                                                          */
+/*                                                                              */
+/* Returns      : None                                                          */
+/*                                                                              */
+/* Note         : This will save the voice configuration in a text file         */
+/********************************************************************************/
+
+void saveConfig(bool voiceCheck, bool colorCheck){
+
+    ofstream file("Database/config.txt", ios::trunc);
+    
+    if (!file.is_open()) return;
+
+
+    file << encryptToHex(voiceCheck ? "1" : "0") << endl;
+
+
+    file << encryptToHex(colorCheck ? "1" : "0") << endl;
+
+    file.close();
+
+}
+
+
+
+/********************************************************************************/
+/* Function Name: sleepIgnoreInput                                              */
+/*                                                                              */
+/* Inputs       : int                                                           */
+/*                                                                              */
+/* Returns      : None                                                          */
+/*                                                                              */
+/* Note         : This will block input during sleep in ubuntu                  */
+/********************************************************************************/
+
+void sleepIgnoreInput(int ms) {
+    
+    struct termios oldt, newt;
+    
+    tcgetattr(STDIN_FILENO, &oldt);
+    
+    newt = oldt;
+
+    newt.c_lflag &= ~(ICANON | ECHO);
+    
+    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+
+    usleep(ms * 1000);
+
+    tcflush(STDIN_FILENO, TCIFLUSH);
+
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
 }

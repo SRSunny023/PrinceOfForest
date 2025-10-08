@@ -1,14 +1,137 @@
 #include "authentication.h"
 #include "utility.h"
 #include "colors.h"
-#include "registration.h"
-#include "login.h"
+#include "main_menu.h"
 
 
 #include <iostream>
 #include <string>
 #include <fstream>
+#include <sstream>
+#include <iomanip>
 using namespace std;
+
+
+
+
+
+/********************************************************************************/
+/* Function Name: encrypt                                                       */
+/*                                                                              */
+/* Inputs       : String,String                                                 */
+/*                                                                              */
+/* Returns      : String                                                        */
+/*                                                                              */
+/* Note         : This will check wether email already exist or not             */
+/*                plain text → XOR → encrypted bytes → hex → save               */
+/********************************************************************************/
+
+string encrypt(const string &data, const string key){
+
+    string encryptedCode = data;
+
+    for(size_t i = 0; i < encryptedCode.size(); ++i){
+
+        encryptedCode[i] ^= key[i%key.size()];
+
+    }
+
+    return encryptedCode;
+
+}
+
+
+
+/********************************************************************************/
+/* Function Name: toHex                                                         */
+/*                                                                              */
+/* Inputs       : String                                                        */
+/*                                                                              */
+/* Returns      : String                                                        */
+/*                                                                              */
+/* Note         : This will convert to Hex                                      */
+/********************************************************************************/
+
+string toHex(const string &data){
+    
+    stringstream ss;
+    
+    for(unsigned char c : data){
+        
+        ss << hex << setw(2) << setfill('0') << (int)c;
+    
+    }
+    
+    return ss.str();
+
+}
+
+
+
+/********************************************************************************/
+/* Function Name: fromHex                                                       */
+/*                                                                              */
+/* Inputs       : String                                                        */
+/*                                                                              */
+/* Returns      : String                                                        */
+/*                                                                              */
+/* Note         : This will reconvert from Hex                                  */
+/********************************************************************************/
+
+string fromHex(const string &hex){
+    
+    string data;
+    
+    for(size_t i = 0; i < hex.size(); i += 2){
+        
+        unsigned int byte;
+        
+        sscanf(hex.substr(i, 2).c_str(), "%02X", &byte);
+        
+        data += static_cast<char>(byte);
+    
+    }
+    
+    return data;
+
+}
+
+
+
+/********************************************************************************/
+/* Function Name: encryptToHex                                                  */
+/*                                                                              */
+/* Inputs       : String                                                        */
+/*                                                                              */
+/* Returns      : String                                                        */
+/*                                                                              */
+/* Note         : This will encrypt and convert to hex                          */
+/********************************************************************************/
+
+string encryptToHex(const string &data) {
+    
+    return toHex(encrypt(data));
+
+}
+
+
+
+/********************************************************************************/
+/* Function Name: decryptFromHex                                                */
+/*                                                                              */
+/* Inputs       : String                                                        */
+/*                                                                              */
+/* Returns      : String                                                        */
+/*                                                                              */
+/* Note         : This will decrypt and convert from hex                        */
+/*                read hex → bytes → XOR → original text                        */
+/********************************************************************************/
+
+string decryptFromHex(const string &hexData) {
+    
+    return encrypt(fromHex(hexData));
+
+}
 
 
 
@@ -24,19 +147,25 @@ using namespace std;
 
 bool isEmailExist(string email){
 
-    string savedEmail, savedPassword, savedUsername;
+    string savedEmailEnc, savedPassword, savedUsername;
     
     ifstream file("Database/authentication.txt");
 
-    while(file >> savedEmail >> savedPassword >> savedUsername){
+    while(file >> savedEmailEnc >> savedPassword >> savedUsername){
 
+        string savedEmail = decryptFromHex(savedEmailEnc);
+        
         if(savedEmail == email){
 
+            file.close();
+            
             return true;
 
         }
 
     }
+
+    file.close();
 
     return false;
 
@@ -45,24 +174,28 @@ bool isEmailExist(string email){
 
 
 /********************************************************************************/
-/* Function Name: isEmailExist                                                  */
+/* Function Name: printAuthenticationMenu                                       */
 /*                                                                              */
-/* Inputs       : String                                                        */
+/* Inputs       : None                                                          */
 /*                                                                              */
-/* Returns      : Bool                                                          */
+/* Returns      : None                                                          */
 /*                                                                              */
-/* Note         : This will check wether email already exist or not             */
+/* Note         : This will print the menu of Authentication                    */
 /********************************************************************************/
 
 void printAuthenticationMenu(){
 
     clearScreen();
 
-    cout << BGGREEN << RED << "╔═══════════════════════AUTHENTICATION═══════════════════════╗\n\n" << RESET;
+    cout << BGGREEN() << RED() << "╔═══════════════════════AUTHENTICATION═══════════════════════╗\n\n" << RESET();
 
-    cout << BGGREEN << BLUE << "1. Registration\n\n2. Log In\n\n3. Reset Password\n\n4. Reset Username\n\n5. Exit\n\n" << RESET;
+    cout << BGGREEN() << BLUE() << "1. Registration\n\n2. Log In\n\n3. Reset Password\n\n4. Reset Username\n\n5. Exit\n\n" << RESET();
 
-    cout << BGGREEN << RED << "╚═══════════════════════AUTHENTICATION═══════════════════════╝\n\n" << RESET;
+    cout << YELLOW() << "IN THIS GAME PRESS: * TO DIRECTLY EXIT THE GAME\n\n" << RESET();
+
+    cout << YELLOW() << "IN THIS GAME PRESS: - TO GO BACK\n\n" << RESET();
+
+    cout << BGGREEN() << RED() << "╚═══════════════════════AUTHENTICATION═══════════════════════╝\n\n" << RESET();
 
 
 }
@@ -70,74 +203,106 @@ void printAuthenticationMenu(){
 
 
 /********************************************************************************/
-/* Function Name: isEmailExist                                                  */
+/* Function Name: authenticationMenu                                            */
 /*                                                                              */
 /* Inputs       : String                                                        */
 /*                                                                              */
 /* Returns      : Bool                                                          */
 /*                                                                              */
-/* Note         : This will check wether email already exist or not             */
+/* Note         : This is the menu of authentication                            */
 /********************************************************************************/
 
 void authenticationMenu(){
     
     int choice;
-    
-    while(1){
 
-        printAuthenticationMenu();
+    string userName = loadSession();
 
-        cout << "Enter Your Choice: ";
+    if(userName != ""){
 
-        speak("Enter Your Choice");
+        string savedEmail, savedPassword, savedUsername;
+        
+        User person;
 
-        cin >> choice;
+        ifstream file("Database/authentication.txt");
 
-        if(choice == 1){
+        while(file >> savedEmail >> savedPassword >> savedUsername){
 
-            registrationMenu();
+            string decryptedEmail = decryptFromHex(savedEmail);
+            string decryptedPassword = decryptFromHex(savedPassword);
+            string decryptedUsername = decryptFromHex(savedUsername);
 
-        }
+            if(decryptedUsername == userName){
 
-        else if(choice == 2){
+                person.email = decryptedEmail;
 
-            loginMenu();
+                person.username = decryptedUsername;
 
-        }
+                mainMenu(person);
 
-        else if(choice == 3){
-
-            cout << "Under Development!\n";
-            
-            speak("Under Development\n");
-
-            pressToContinue();
+            }
 
         }
 
-        else if(choice == 4){
+    }
 
-            cout << "Under Development!\n";
-            
-            speak("Under Development\n");
+    else{
 
-            pressToContinue();
+        while(1){
+        
+            printAuthenticationMenu();
 
-        }
+            choice = getIntInput("Enter Your Choice: ");
 
-        else if(choice == 5){
+            if(choice == 1){
 
-            exitWindow();
+                registrationMenu();
 
-        }
+            }
 
-        else{
+            else if(choice == 2){
 
-            cout << "Invalid Input! Choose Between (1 - 5)!\n";
+                loginMenu();
 
-            speak("Invalid Input! Choose Between (1 - 5)");
+            }
 
-            pressToContinue();
+            else if(choice == 3){
+
+                updatePasswordMenu();
+
+            }
+
+            else if(choice == 4){
+
+                updateUsernameMenu();
+
+            }
+
+            else if(choice == 5){
+
+                exitWindow();
+
+            }
+
+            else if(choice == -1){
+
+                cout << RED() << "Back Is Not Allowed Here!" << RESET() << endl;
+
+                speak("Back Is Not Allowed Here!");
+
+                pressToContinue(0);
+
+            }
+
+            else{
+
+                cout << RED() << "Invalid Input! Choose Between (1 - 5)!" << RESET() << endl;;
+
+                speak("Invalid Input! Choose Between (1 - 5)");
+
+                pressToContinue(0);
+
+            }
 
         }
 

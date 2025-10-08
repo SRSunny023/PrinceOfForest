@@ -1,4 +1,3 @@
-#include "login.h"
 #include "authentication.h"
 #include "colors.h"
 #include "utility.h"
@@ -8,24 +7,25 @@
 #include <iostream>
 #include <string>
 #include <fstream>
+#include <limits>
 using namespace std;
 
 
 
 
 /********************************************************************************/
-/* Function Name: registrationMenu                                              */
+/* Function Name: loginMenu                                                     */
 /*                                                                              */
 /* Inputs       : None                                                          */
 /*                                                                              */
 /* Returns      : None                                                          */
 /*                                                                              */
-/* Note         : This will register User                                       */
+/* Note         : This will login User                                          */
 /********************************************************************************/
 
 void loginMenu(){
     
-    string email,password,savedEmail,savedPassword,savedUsername;
+    string email,password,savedEmailEnc,savedPasswordEnc,savedUsernameEnc,savedUsername;
 
     string command;
 
@@ -33,21 +33,36 @@ void loginMenu(){
 
     User person;
 
+    cin.ignore(numeric_limits<streamsize>::max(), '\n');
+
     do{
 
         clearScreen();
 
-        cout << BGGREEN << RED << "╔═══════════════════════LOGIN═══════════════════════╗\n" << RESET;
+        cout << BGGREEN() << RED() << "╔═══════════════════════LOGIN═══════════════════════╗\n" << RESET();
 
         email = getEmailInput("Enter Your Email: ");
+
+        if(email == "-")    return;
 
         if(!isEmailExist(email)){
 
             command = "Email Address Not Found. Create A New Account Or Try Again With Different Email!";
             
-            cout << RED << command << RESET << endl;
+            cout << RED() << command << RESET() << endl;
 
             speak(command);
+
+            if(!VOICE_ENABLED){
+
+                #ifdef _WIN32
+                    sleepMS(2000);
+                    while (_kbhit()) _getch();
+                #else
+                    sleepIgnoreInput(2000);
+                #endif
+
+            }
 
             continue;
 
@@ -55,19 +70,25 @@ void loginMenu(){
 
         password = getPasswordInput("Enter Your Password: ");
 
+        if(password == "-") return;
+
         ifstream file("Database/authentication.txt");
 
         bool found = false;
 
-        while(file >> savedEmail >> savedPassword >> savedUsername){
+        while(file >> savedEmailEnc >> savedPasswordEnc >> savedUsernameEnc){
 
+            string savedEmail = decryptFromHex(savedEmailEnc);
+            string savedPassword = decryptFromHex(savedPasswordEnc);
+            savedUsername = decryptFromHex(savedUsernameEnc);
+            
             if(savedEmail == email && savedPassword == password){
 
                 command = "Login Successfull!";
 
                 loadingScreen("Login In Progress...");
 
-                cout << RED << command << RESET << endl;
+                cout << RED() << command << RESET() << endl;
 
                 speak(command);
 
@@ -76,6 +97,17 @@ void loginMenu(){
                 found = true;
 
                 file.close();
+
+                if(!VOICE_ENABLED){
+
+                    #ifdef _WIN32
+                        sleepMS(2000);
+                        while (_kbhit()) _getch();
+                    #else
+                        sleepIgnoreInput(2000);
+                    #endif
+
+                }
 
                 break;
 
@@ -87,9 +119,20 @@ void loginMenu(){
 
             command = "Password Didn't Matched!";
 
-            cout << RED << command << RESET << endl;
+            cout << RED() << command << RESET() << endl;
 
             speak(command);
+
+            if(!VOICE_ENABLED){
+
+                #ifdef _WIN32
+                    sleepMS(2000);
+                    while (_kbhit()) _getch();
+                #else
+                    sleepIgnoreInput(2000);
+                #endif
+
+            }
 
         }
         
@@ -100,6 +143,8 @@ void loginMenu(){
         person.email = email;
         
         person.username = savedUsername;
+
+        saveSession(person.username);
 
         mainMenu(person);
 
